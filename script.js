@@ -1,1 +1,111 @@
-const menuBtn=document.querySelector('.menu-btn');const nav=document.querySelector('.nav');const form=document.getElementById('contactForm');const note=document.getElementById('formNote');function closeMenu(){if(!nav||!menuBtn)return;nav.classList.remove('open');menuBtn.setAttribute('aria-expanded','false');menuBtn.textContent='Menu'}if(menuBtn&&nav){menuBtn.addEventListener('click',()=>{const open=nav.classList.toggle('open');menuBtn.setAttribute('aria-expanded',String(open));menuBtn.textContent=open?'Close':'Menu'});nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',closeMenu));document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});window.addEventListener('resize',()=>{if(innerWidth>900)closeMenu()})}document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const target=document.querySelector(a.getAttribute('href'));if(!target)return;e.preventDefault();window.scrollTo({top:target.getBoundingClientRect().top+scrollY-75,behavior:'smooth'})}));const sections=[...document.querySelectorAll('main section[id]')],links=[...document.querySelectorAll('.nav a[href^="#"]')];if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{const current=entries.filter(x=>x.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];if(!current)return;links.forEach(a=>{const active=a.getAttribute('href')===`#${current.target.id}`;a.classList.toggle('active',active);active?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current')})},{rootMargin:'-25% 0px -60% 0px',threshold:[.1,.3]});sections.forEach(s=>observer.observe(s))}const interest=form?.querySelector('[name="interest"]');document.querySelectorAll('[data-interest]').forEach(a=>a.addEventListener('click',()=>{if(interest)interest.value=a.dataset.interest}));if(form&&note){form.addEventListener('submit',e=>{e.preventDefault();if(!form.checkValidity()){form.reportValidity();return}const data=Object.fromEntries(new FormData(form).entries());const enquiries=JSON.parse(localStorage.getItem('hmf_enquiries')||'[]');enquiries.push({...data,submittedAt:new Date().toISOString()});localStorage.setItem('hmf_enquiries',JSON.stringify(enquiries.slice(-20)));note.textContent=`Thank you, ${data.name}. Your enquiry has been recorded on this device. Online delivery will be enabled when HM Foundation activates its secure backend.`;note.classList.add('success');form.reset()});form.addEventListener('input',()=>note.classList.remove('success'))}const topButton=document.createElement('button');topButton.className='back-to-top';topButton.type='button';topButton.setAttribute('aria-label','Back to top');topButton.textContent='Top';document.body.appendChild(topButton);topButton.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));addEventListener('scroll',()=>topButton.classList.toggle('show',scrollY>700),{passive:true});
+const menuBtn=document.querySelector('.menu-btn');
+const nav=document.querySelector('.nav');
+const form=document.getElementById('contactForm');
+const note=document.getElementById('formNote');
+
+const SUPABASE_URL='https://ialobcshxbesmncngixx.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_5fmGpjGAQm7qwUS1xtp-zg_CI4fenzN';
+
+function closeMenu(){
+  if(!nav||!menuBtn)return;
+  nav.classList.remove('open');
+  menuBtn.setAttribute('aria-expanded','false');
+  menuBtn.textContent='Menu';
+}
+
+if(menuBtn&&nav){
+  menuBtn.addEventListener('click',()=>{
+    const open=nav.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded',String(open));
+    menuBtn.textContent=open?'Close':'Menu';
+  });
+  nav.querySelectorAll('a').forEach(a=>a.addEventListener('click',closeMenu));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
+  window.addEventListener('resize',()=>{if(innerWidth>900)closeMenu()});
+}
+
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{
+  const target=document.querySelector(a.getAttribute('href'));
+  if(!target)return;
+  e.preventDefault();
+  window.scrollTo({top:target.getBoundingClientRect().top+scrollY-75,behavior:'smooth'});
+}));
+
+const sections=[...document.querySelectorAll('main section[id]')];
+const links=[...document.querySelectorAll('.nav a[href^="#"]')];
+if('IntersectionObserver'in window){
+  const observer=new IntersectionObserver(entries=>{
+    const current=entries.filter(x=>x.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio)[0];
+    if(!current)return;
+    links.forEach(a=>{
+      const active=a.getAttribute('href')===`#${current.target.id}`;
+      a.classList.toggle('active',active);
+      active?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current');
+    });
+  },{rootMargin:'-25% 0px -60% 0px',threshold:[.1,.3]});
+  sections.forEach(s=>observer.observe(s));
+}
+
+const interest=form?.querySelector('[name="interest"]');
+document.querySelectorAll('[data-interest]').forEach(a=>a.addEventListener('click',()=>{
+  if(interest)interest.value=a.dataset.interest;
+}));
+
+async function submitEnquiry(data){
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/hmf_enquiries`,{
+    method:'POST',
+    headers:{
+      apikey:SUPABASE_PUBLISHABLE_KEY,
+      'Content-Type':'application/json',
+      Prefer:'return=minimal'
+    },
+    body:JSON.stringify({
+      full_name:data.name.trim(),
+      email:data.email.trim().toLowerCase(),
+      enquiry_type:data.interest||'General enquiry',
+      message:data.message.trim()
+    })
+  });
+  if(!response.ok){
+    const detail=await response.text();
+    throw new Error(detail||'Unable to submit enquiry');
+  }
+}
+
+if(form&&note){
+  note.textContent='Enquiries are securely submitted to HM Foundation for review.';
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    if(!form.checkValidity()){
+      form.reportValidity();
+      return;
+    }
+    const button=form.querySelector('button[type="submit"]');
+    const data=Object.fromEntries(new FormData(form).entries());
+    try{
+      if(button){button.disabled=true;button.textContent='Submitting...';}
+      note.classList.remove('success');
+      note.textContent='Submitting your enquiry securely...';
+      await submitEnquiry(data);
+      note.textContent=`Thank you, ${data.name}. Your enquiry has been received by HM Foundation.`;
+      note.classList.add('success');
+      form.reset();
+    }catch(error){
+      console.error('HM Foundation enquiry submission failed:',error);
+      note.classList.remove('success');
+      note.textContent='We could not submit your enquiry right now. Please try again shortly.';
+    }finally{
+      if(button){button.disabled=false;button.textContent='Submit enquiry';}
+    }
+  });
+  form.addEventListener('input',()=>note.classList.remove('success'));
+}
+
+const topButton=document.createElement('button');
+topButton.className='back-to-top';
+topButton.type='button';
+topButton.setAttribute('aria-label','Back to top');
+topButton.textContent='Top';
+document.body.appendChild(topButton);
+topButton.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
+addEventListener('scroll',()=>topButton.classList.toggle('show',scrollY>700),{passive:true});

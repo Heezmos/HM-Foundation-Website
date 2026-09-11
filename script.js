@@ -51,6 +51,72 @@ document.querySelectorAll('[data-interest]').forEach(a=>a.addEventListener('clic
   if(interest)interest.value=a.dataset.interest;
 }));
 
+const escapeHtml=value=>String(value??'').replace(/[&<>'"]/g,char=>({
+  '&':'&amp;',
+  '<':'&lt;',
+  '>':'&gt;',
+  "'":'&#39;',
+  '"':'&quot;'
+}[char]));
+
+async function supabaseGet(table,select,filters=''){
+  const response=await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}${filters}`,{
+    headers:{apikey:SUPABASE_PUBLISHABLE_KEY}
+  });
+  if(!response.ok){
+    throw new Error(await response.text()||`Unable to load ${table}`);
+  }
+  return response.json();
+}
+
+async function loadPublicPrograms(){
+  const container=document.querySelector('#programs .cards');
+  if(!container)return;
+  try{
+    const programs=await supabaseGet(
+      'hmf_programs',
+      'id,title,description,status,start_date,end_date,created_at',
+      '&status=eq.active&order=start_date.asc.nullslast,created_at.asc'
+    );
+    if(!programs.length)return;
+    container.innerHTML=programs.map((program,index)=>`
+      <article class="program-card">
+        <div class="program-index">${String(index+1).padStart(2,'0')}</div>
+        <div class="program-body">
+          <span class="kicker">Active programme</span>
+          <h3>${escapeHtml(program.title)}</h3>
+          <p>${escapeHtml(program.description||'Programme details will be published as implementation progresses.')}</p>
+          <a class="text-link" href="#contact" data-interest="General enquiry">Programme enquiries</a>
+        </div>
+      </article>
+    `).join('');
+    container.querySelectorAll('[data-interest]').forEach(a=>a.addEventListener('click',()=>{
+      if(interest)interest.value=a.dataset.interest;
+    }));
+  }catch(error){
+    console.error('HM Foundation programme loading failed:',error);
+  }
+}
+
+async function loadPublicPartners(){
+  const container=document.querySelector('#partners .partner-types');
+  if(!container)return;
+  try{
+    const partners=await supabaseGet(
+      'hmf_partners',
+      'id,organisation_name,partnership_type,status,created_at',
+      '&status=eq.active&order=organisation_name.asc'
+    );
+    if(!partners.length)return;
+    container.innerHTML=partners.map(partner=>{
+      const type=partner.partnership_type?` · ${escapeHtml(partner.partnership_type)}`:'';
+      return `<span>${escapeHtml(partner.organisation_name)}${type}</span>`;
+    }).join('');
+  }catch(error){
+    console.error('HM Foundation partner loading failed:',error);
+  }
+}
+
 async function submitEnquiry(data){
   const response=await fetch(`${SUPABASE_URL}/rest/v1/hmf_enquiries`,{
     method:'POST',
@@ -100,6 +166,8 @@ if(form&&note){
   });
   form.addEventListener('input',()=>note.classList.remove('success'));
 }
+
+Promise.allSettled([loadPublicPrograms(),loadPublicPartners()]);
 
 const topButton=document.createElement('button');
 topButton.className='back-to-top';
